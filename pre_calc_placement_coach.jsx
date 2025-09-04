@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import YAML from "yaml";
 
 /**
  * Pre‑Calc Placement Coach — Single‑File React App
@@ -241,6 +242,7 @@ export default function App() {
   const [baseUrl, setBaseUrl] = useState("https://api.openai.com/v1");
   const [model, setModel] = useState("gpt-4o-mini");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Conversation
   const [messages, setMessages] = useState(() => loadTranscript() ?? []);
@@ -295,6 +297,60 @@ export default function App() {
   function handleSaveSettings() {
     saveSettings({ apiKey, baseUrl, model });
     setSettingsOpen(false);
+  }
+
+  function downloadConfig() {
+    const cfg = { baseUrl, model, apiKey };
+    const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "precalc-config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function tryParseConfig(text) {
+    // Try JSON first
+    try {
+      const j = JSON.parse(text);
+      if (j && (j.apiKey || j.baseUrl || j.model)) return j;
+    } catch {}
+    // Then YAML
+    try {
+      const y = YAML.parse(text);
+      if (y && (y.apiKey || y.baseUrl || y.model)) return y;
+    } catch {}
+    return null;
+  }
+
+  function sanitizeConfig(obj) {
+    if (!obj || typeof obj !== "object") return null;
+    const next = {
+      baseUrl: typeof obj.baseUrl === "string" && obj.baseUrl.trim() ? obj.baseUrl.trim() : baseUrl,
+      model: typeof obj.model === "string" && obj.model.trim() ? obj.model.trim() : model,
+      apiKey: typeof obj.apiKey === "string" ? obj.apiKey : apiKey,
+    };
+    return next;
+  }
+
+  async function onImportConfigFile(file) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const raw = tryParseConfig(text);
+      if (!raw) throw new Error("Could not parse config (JSON or YAML)");
+      const cfg = sanitizeConfig(raw);
+      if (!cfg) throw new Error("Invalid config format");
+      setBaseUrl(cfg.baseUrl || "");
+      setModel(cfg.model || "");
+      setApiKey(cfg.apiKey || "");
+      saveSettings({ apiKey: cfg.apiKey || "", baseUrl: cfg.baseUrl || "", model: cfg.model || "" });
+    } catch (e) {
+      alert("Import failed: " + (e?.message || String(e)));
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   async function startSession() {
@@ -543,6 +599,22 @@ export default function App() {
             <div className="text-[11px] text-slate-500 mt-1">Stored only in your browser’s localStorage.</div>
           </div>
           <div className="flex items-center justify-end gap-2 pt-2">
+            {/* hidden file input for import */}
+            <input
+              type="file"
+              accept=".json,.yml,.yaml,.txt,application/json,text/yaml"
+              ref={fileInputRef}
+              onChange={(e) => onImportConfigFile(e.target.files?.[0])}
+              className="hidden"
+            />
+            <IconButton title="Export current config" onClick={downloadConfig}>
+              <span>⬇️</span>
+              <span className="text-sm">Export</span>
+            </IconButton>
+            <IconButton title="Import config file" onClick={() => fileInputRef.current?.click()}>
+              <span>📁</span>
+              <span className="text-sm">Import</span>
+            </IconButton>
             <IconButton onClick={() => setSettingsOpen(false)}>Cancel</IconButton>
             <IconButton onClick={handleSaveSettings} className="bg-slate-900 text-white border-slate-900 hover:bg-slate-800">Save</IconButton>
           </div>
