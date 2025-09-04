@@ -269,6 +269,8 @@ export default function App() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [retrying, setRetrying] = useState(false);
+  const [retryNote, setRetryNote] = useState("");
   const lastActionRef = useRef(0);
 
   // State drawer
@@ -413,6 +415,40 @@ export default function App() {
     return next;
   }
 
+  function isNetworkError(err) {
+    try {
+      const msg = (err?.message || String(err) || "").toLowerCase();
+      if (msg.includes("llm error")) return false; // server returned HTTP error; not a network failure
+      return (
+        msg.includes("failed to fetch") ||
+        msg.includes("networkerror") ||
+        msg.includes("load failed") ||
+        (msg.includes("fetch") && !msg.includes("llm error"))
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  async function chatWithRetry(args) {
+    try {
+      return await callChatCompletions(args);
+    } catch (e) {
+      if (isNetworkError(e)) {
+        setRetryNote("Network issue, retrying…");
+        setRetrying(true);
+        try {
+          await new Promise((r) => setTimeout(r, 700));
+          return await callChatCompletions(args);
+        } finally {
+          setRetrying(false);
+          setRetryNote("");
+        }
+      }
+      throw e;
+    }
+  }
+
   async function onImportConfigFile(file) {
     if (!file) return;
     try {
@@ -500,7 +536,7 @@ export default function App() {
       ];
       setMessages(seed);
       setBusy(true);
-      const { text: assistantText, usage } = await callChatCompletions({
+      const { text: assistantText, usage } = await chatWithRetry({
         baseUrl,
         apiKey,
         model,
@@ -539,7 +575,7 @@ export default function App() {
       setMessages(next);
       setBusy(true);
       setInput("");
-      const { text: assistantText, usage } = await callChatCompletions({
+      const { text: assistantText, usage } = await chatWithRetry({
         baseUrl,
         apiKey,
         model,
@@ -648,6 +684,9 @@ export default function App() {
           <div className="border-t border-slate-200 mt-3 pt-3">
             {error && (
               <div className="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{error}</div>
+            )}
+            {retrying && (
+              <div className="mb-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">{retryNote || "Network issue, retrying…"}</div>
             )}
             <div className="flex items-center gap-2">
               <IconButton title="Send NEXT" onClick={() => sendUser("NEXT")} disabled={busy}>
