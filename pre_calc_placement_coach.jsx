@@ -262,6 +262,7 @@ export default function App() {
   const [model, setModel] = useState("gpt-4o-mini");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const fileInputRef = useRef(null);
+  const sessionFileInputRef = useRef(null);
   const [magicCopied, setMagicCopied] = useState(false);
 
   // Conversation
@@ -389,6 +390,47 @@ export default function App() {
     a.download = "precalc-config.json";
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // ------------------------------ Session Import/Export ------------------------------
+  function exportSession() {
+    try {
+      const payload = {
+        kind: "pcpc.session.v1",
+        exportedAt: new Date().toISOString(),
+        messages,
+        lastYaml: lastYaml || "",
+      };
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `precalc-session-${ts}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Export failed: " + (e?.message || String(e)));
+    }
+  }
+
+  async function onImportSessionFile(file) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const msgs = Array.isArray(data?.messages) ? data.messages : [];
+      const y = typeof data?.lastYaml === "string" ? data.lastYaml : "";
+      setMessages(msgs);
+      setLastYaml(y);
+      if (y) setDrawerOpen(true);
+      setMetrics({ requests: 0, prompt: 0, completion: 0, total: 0, last: { prompt: 0, completion: 0, total: 0 } });
+      setSettingsOpen(false);
+    } catch (e) {
+      alert("Import failed: " + (e?.message || String(e)));
+    } finally {
+      if (sessionFileInputRef.current) sessionFileInputRef.current.value = "";
+    }
   }
 
   function tryParseConfig(text) {
@@ -812,6 +854,23 @@ export default function App() {
             <IconButton title="Copy Magic Link (stores config in #fragment)" onClick={copyMagicLink}>
               <span>🔗</span>
               <span className="text-sm">Magic Link{magicCopied ? " ✓" : ""}</span>
+            </IconButton>
+            {/* Session import/export */}
+            <input
+              type="file"
+              accept=".json,application/json"
+              ref={sessionFileInputRef}
+              onChange={(e) => onImportSessionFile(e.target.files?.[0])}
+              className="hidden"
+            />
+            <div className="ml-2 mr-2 h-5 w-px bg-slate-200" aria-hidden />
+            <IconButton title="Export session (messages + YAML)" onClick={exportSession}>
+              <span>💾</span>
+              <span className="text-sm">Export Session</span>
+            </IconButton>
+            <IconButton title="Import session (.json)" onClick={() => sessionFileInputRef.current?.click()}>
+              <span>📂</span>
+              <span className="text-sm">Import Session</span>
             </IconButton>
             <IconButton onClick={() => setSettingsOpen(false)}>Cancel</IconButton>
             <IconButton onClick={handleSaveSettings} className="bg-slate-900 text-white border-slate-900 hover:bg-slate-800">Save</IconButton>

@@ -45,6 +45,12 @@ This repo is set up to deploy from the `main` branch using GitHub Actions. On pu
 - If you fork/rename the repo, update `vite.config.js` `base` to match your Pages path.
 - The app uses Tailwind utility classes already present in the JSX file.
 
+## Sessions (Import/Export)
+
+- Export Session: In Settings, click “Export Session” to download a `.json` containing the transcript (`messages`) and the last YAML state. API keys are not included.
+- Import Session: In Settings, click “Import Session” and select a previously exported `.json` to restore the transcript and YAML. Metrics reset on import.
+- Notes: Session files are portable across devices. Settings (baseUrl/model/apiKey) are handled separately via Config Import/Export or Magic Link.
+
 ## Magic Link (no typing credentials)
 
 You can prefill `baseUrl`, `model`, and `apiKey` via a link that encodes the config in the URL fragment (after `#`). Example workflow:
