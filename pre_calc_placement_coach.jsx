@@ -848,46 +848,64 @@ export default function App() {
             />
             <div className="text-[11px] text-slate-500 mt-1">Stored only in your browser’s localStorage.</div>
           </div>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            {/* hidden file input for import */}
-            <input
-              type="file"
-              accept=".json,.yml,.yaml,.txt,application/json,text/yaml"
-              ref={fileInputRef}
-              onChange={(e) => onImportConfigFile(e.target.files?.[0])}
-              className="hidden"
-            />
-            <IconButton title="Export current config" onClick={downloadConfig}>
-              <span>⬇️</span>
-              <span className="text-sm">Export</span>
-            </IconButton>
-            <IconButton title="Import config file" onClick={() => fileInputRef.current?.click()}>
-              <span>📁</span>
-              <span className="text-sm">Import</span>
-            </IconButton>
-            <IconButton title="Copy Magic Link (stores config in #fragment)" onClick={copyMagicLink}>
-              <span>🔗</span>
-              <span className="text-sm">Magic Link{magicCopied ? " ✓" : ""}</span>
-            </IconButton>
-            {/* Session import/export */}
-            <input
-              type="file"
-              accept=".json,application/json"
-              ref={sessionFileInputRef}
-              onChange={(e) => onImportSessionFile(e.target.files?.[0])}
-              className="hidden"
-            />
-            <div className="ml-2 mr-2 h-5 w-px bg-slate-200" aria-hidden />
-            <IconButton title="Export session (messages + YAML)" onClick={exportSession}>
-              <span>💾</span>
-              <span className="text-sm">Export Session</span>
-            </IconButton>
-            <IconButton title="Import session (.json)" onClick={() => sessionFileInputRef.current?.click()}>
-              <span>📂</span>
-              <span className="text-sm">Import Session</span>
-            </IconButton>
-            <IconButton onClick={() => setSettingsOpen(false)}>Cancel</IconButton>
-            <IconButton onClick={handleSaveSettings} className="bg-slate-900 text-white border-slate-900 hover:bg-slate-800">Save</IconButton>
+          <div className="space-y-3 pt-2">
+            {/* Config actions */}
+            <div>
+              <div className="text-xs font-semibold text-slate-500 mb-1">Config</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* hidden file input for config import */}
+                <input
+                  type="file"
+                  accept=".json,.yml,.yaml,.txt,application/json,text/yaml"
+                  ref={fileInputRef}
+                  onChange={(e) => onImportConfigFile(e.target.files?.[0])}
+                  className="hidden"
+                />
+                <IconButton title="Import settings (includes API key)" onClick={() => fileInputRef.current?.click()}>
+                  <span>📁</span>
+                  <span className="text-sm">Import Config</span>
+                </IconButton>
+                <IconButton title="Export settings (includes API key)" onClick={downloadConfig}>
+                  <span>⬇️</span>
+                  <span className="text-sm">Export Config</span>
+                </IconButton>
+                <IconButton title="Copy Magic Link (stores config in #fragment)" onClick={copyMagicLink}>
+                  <span>🔗</span>
+                  <span className="text-sm">Magic Link{magicCopied ? " ✓" : ""}</span>
+                </IconButton>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">Config includes base URL, model, and API key. Share securely.</div>
+            </div>
+
+            {/* Session actions */}
+            <div>
+              <div className="text-xs font-semibold text-slate-500 mb-1">Session</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* hidden file input for session import */}
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  ref={sessionFileInputRef}
+                  onChange={(e) => onImportSessionFile(e.target.files?.[0])}
+                  className="hidden"
+                />
+                <IconButton title="Import session (transcript + YAML)" onClick={() => sessionFileInputRef.current?.click()}>
+                  <span>📂</span>
+                  <span className="text-sm">Import Session</span>
+                </IconButton>
+                <IconButton title="Export session (transcript + YAML)" onClick={exportSession}>
+                  <span>💾</span>
+                  <span className="text-sm">Export Session</span>
+                </IconButton>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">Session file contains transcript and state only; no API key.</div>
+            </div>
+
+            {/* Footer actions */}
+            <div className="flex items-center justify-end gap-2">
+              <IconButton onClick={() => setSettingsOpen(false)}>Cancel</IconButton>
+              <IconButton onClick={handleSaveSettings} className="bg-slate-900 text-white border-slate-900 hover:bg-slate-800">Save</IconButton>
+            </div>
           </div>
         </div>
       </Modal>
