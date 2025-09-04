@@ -329,6 +329,35 @@ export default function App() {
 
   const hasSession = messages.length > 0;
 
+  // ---- Token metrics helpers (inside App scope) ----
+  function approxTokensFromText(t) {
+    if (!t) return 0;
+    const chars = t.length;
+    return Math.ceil(chars / 4); // rough heuristic
+  }
+
+  function approxPromptTokensFromMessages(msgs) {
+    try {
+      const joined = (msgs || []).map(m => (m?.content || "")).join("\n");
+      return approxTokensFromText(joined);
+    } catch {
+      return 0;
+    }
+  }
+
+  function recordUsage({ usage, msgs, completionText }) {
+    const promptTokens = usage?.prompt_tokens ?? approxPromptTokensFromMessages(msgs || []);
+    const completionTokens = usage?.completion_tokens ?? approxTokensFromText(completionText || "");
+    const totalTokens = usage?.total_tokens ?? (promptTokens + completionTokens);
+    setMetrics((m) => ({
+      requests: (m.requests || 0) + 1,
+      prompt: (m.prompt || 0) + promptTokens,
+      completion: (m.completion || 0) + completionTokens,
+      total: (m.total || 0) + totalTokens,
+      last: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
+    }));
+  }
+
   function canAct() {
     const now = Date.now();
     if (now - lastActionRef.current < 300) return false;
@@ -790,33 +819,6 @@ function splitIntoBlocks(text) {
   while ((m = re.exec(text)) !== null) {
     const before = text.slice(lastIndex, m.index);
     if (before.trim()) blocks.push({ type: "text", text: before.trim() });
-  function approxTokensFromText(t) {
-    if (!t) return 0;
-    const chars = t.length;
-    return Math.ceil(chars / 4); // rough heuristic
-  }
-
-  function approxPromptTokensFromMessages(msgs) {
-    try {
-      const joined = msgs.map(m => (m?.content || "")).join("\n");
-      return approxTokensFromText(joined);
-    } catch {
-      return 0;
-    }
-  }
-
-  function recordUsage({ usage, msgs, completionText }) {
-    const promptTokens = usage?.prompt_tokens ?? approxPromptTokensFromMessages(msgs || []);
-    const completionTokens = usage?.completion_tokens ?? approxTokensFromText(completionText || "");
-    const totalTokens = usage?.total_tokens ?? (promptTokens + completionTokens);
-    setMetrics((m) => ({
-      requests: (m.requests || 0) + 1,
-      prompt: (m.prompt || 0) + promptTokens,
-      completion: (m.completion || 0) + completionTokens,
-      total: (m.total || 0) + totalTokens,
-      last: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
-    }));
-  }
     blocks.push({ type: "code", text: m[1].trim() });
     lastIndex = m.index + m[0].length;
   }
