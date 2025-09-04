@@ -243,6 +243,7 @@ export default function App() {
   const [model, setModel] = useState("gpt-4o-mini");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const fileInputRef = useRef(null);
+  const [magicCopied, setMagicCopied] = useState(false);
 
   // Conversation
   const [messages, setMessages] = useState(() => loadTranscript() ?? []);
@@ -264,6 +265,20 @@ export default function App() {
       setBaseUrl(s.baseUrl || "https://api.openai.com/v1");
       setModel(s.model || "gpt-4o-mini");
     }
+    // Consume MagicLink config from URL fragment, if present
+    try {
+      const cfg = parseMagicLinkFromHash();
+      if (cfg) {
+        setBaseUrl(cfg.baseUrl || "");
+        setModel(cfg.model || "");
+        setApiKey(cfg.apiKey || "");
+        saveSettings({ apiKey: cfg.apiKey || "", baseUrl: cfg.baseUrl || "", model: cfg.model || "" });
+        // Remove the fragment to avoid lingering secrets in the address bar
+        if (typeof history?.replaceState === "function") {
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+      }
+    } catch {}
   }, []);
 
   // Auto-scroll transcript
@@ -350,6 +365,62 @@ export default function App() {
       alert("Import failed: " + (e?.message || String(e)));
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  // ------------------------------ MagicLink helpers ------------------------------
+  function toBase64Url(str) {
+    try {
+      const b64 = btoa(unescape(encodeURIComponent(str)));
+      return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    } catch {
+      return "";
+    }
+  }
+
+  function fromBase64Url(b64url) {
+    try {
+      let b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
+      const pad = b64.length % 4;
+      if (pad) b64 += "=".repeat(4 - pad);
+      const str = atob(b64);
+      return decodeURIComponent(escape(str));
+    } catch {
+      return null;
+    }
+  }
+
+  function buildMagicLink(cfg) {
+    const json = JSON.stringify({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey });
+    const enc = toBase64Url(json);
+    const base = `${window.location.origin}${window.location.pathname}`;
+    return `${base}#cfg=${enc}`;
+  }
+
+  function parseMagicLinkFromHash() {
+    const h = window.location.hash || "";
+    if (!h) return null;
+    const m = h.match(/[#&]cfg=([A-Za-z0-9_\-]+)/);
+    if (!m) return null;
+    const json = fromBase64Url(m[1]);
+    if (!json) return null;
+    try {
+      const obj = JSON.parse(json);
+      return sanitizeConfig(obj);
+    } catch {
+      return null;
+    }
+  }
+
+  async function copyMagicLink() {
+    const link = buildMagicLink({ baseUrl, model, apiKey });
+    try {
+      await navigator.clipboard?.writeText(link);
+      setMagicCopied(true);
+      setTimeout(() => setMagicCopied(false), 1500);
+    } catch (e) {
+      // Fallback: show prompt
+      window.prompt("Copy this Magic Link", link);
     }
   }
 
@@ -614,6 +685,10 @@ export default function App() {
             <IconButton title="Import config file" onClick={() => fileInputRef.current?.click()}>
               <span>📁</span>
               <span className="text-sm">Import</span>
+            </IconButton>
+            <IconButton title="Copy Magic Link (stores config in #fragment)" onClick={copyMagicLink}>
+              <span>🔗</span>
+              <span className="text-sm">Magic Link{magicCopied ? " ✓" : ""}</span>
             </IconButton>
             <IconButton onClick={() => setSettingsOpen(false)}>Cancel</IconButton>
             <IconButton onClick={handleSaveSettings} className="bg-slate-900 text-white border-slate-900 hover:bg-slate-800">Save</IconButton>
