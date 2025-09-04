@@ -112,6 +112,7 @@ const LS_KEYS = {
   settings: "pcpc_settings_v1",
   transcript: "pcpc_transcript_v1",
   lastYaml: "pcpc_state_yaml_v1",
+  metrics: "pcpc_metrics_v1",
 };
 
 function loadSettings() {
@@ -149,6 +150,22 @@ function saveTranscript(t) {
 function saveLastYaml(y) {
   try {
     localStorage.setItem(LS_KEYS.lastYaml, y || "");
+  } catch {}
+}
+
+function loadMetrics() {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.metrics);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveMetrics(m) {
+  try {
+    localStorage.setItem(LS_KEYS.metrics, JSON.stringify(m));
   } catch {}
 }
 
@@ -203,7 +220,8 @@ async function callChatCompletions({ baseUrl, apiKey, model, messages }) {
   }
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content ?? "";
-  return text;
+  const usage = data?.usage || null;
+  return { text, usage };
 }
 
 // ------------------------------ Small UI primitives ------------------------------
@@ -256,6 +274,9 @@ export default function App() {
   // State drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [lastYaml, setLastYaml] = useState(() => localStorage.getItem(LS_KEYS.lastYaml) || "");
+  const [metrics, setMetrics] = useState(() =>
+    loadMetrics() || { requests: 0, prompt: 0, completion: 0, total: 0, last: { prompt: 0, completion: 0, total: 0 } }
+  );
 
   const transcriptEndRef = useRef(null);
 
@@ -297,6 +318,11 @@ export default function App() {
   useEffect(() => {
     saveLastYaml(lastYaml || "");
   }, [lastYaml]);
+
+  // Persist metrics
+  useEffect(() => {
+    saveMetrics(metrics);
+  }, [metrics]);
 
   // Derived: stage progress (best-effort parse)
   const stageInfo = useMemo(() => parseStageProgress(lastYaml), [lastYaml]);
@@ -445,12 +471,13 @@ export default function App() {
       ];
       setMessages(seed);
       setBusy(true);
-      const assistantText = await callChatCompletions({
+      const { text: assistantText, usage } = await callChatCompletions({
         baseUrl,
         apiKey,
         model,
         messages: seed,
       });
+      recordUsage({ usage, msgs: seed, completionText: assistantText });
       const yaml = extractStateYaml(assistantText);
       if (yaml) {
         setLastYaml(yaml);
@@ -483,12 +510,13 @@ export default function App() {
       setMessages(next);
       setBusy(true);
       setInput("");
-      const assistantText = await callChatCompletions({
+      const { text: assistantText, usage } = await callChatCompletions({
         baseUrl,
         apiKey,
         model,
         messages: next,
       });
+      recordUsage({ usage, msgs: next, completionText: assistantText });
       const yaml = extractStateYaml(assistantText);
       if (yaml) {
         setLastYaml(yaml);
@@ -511,6 +539,7 @@ export default function App() {
     setLastYaml("");
     setDrawerOpen(false);
     setError("");
+    setMetrics({ requests: 0, prompt: 0, completion: 0, total: 0, last: { prompt: 0, completion: 0, total: 0 } });
   }
 
   function downloadYaml() {
@@ -537,7 +566,7 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="hidden sm:block text-xs text-slate-500 mr-2">
+            <div className="hidden sm:block text-[11px] text-slate-500 mr-3">
               {stageInfo.current != null ? (
                 <span>
                   Progress: <span className="font-medium">Stage {stageInfo.current} / {stageInfo.total}</span>
@@ -546,11 +575,16 @@ export default function App() {
                 <span>Progress: <span className="font-medium">—</span></span>
               )}
             </div>
-              <IconButton title="Settings" onClick={() => setSettingsOpen(true)} disabled={busy}>
-                <span className="text-base">⚙️</span>
-                <span className="text-sm">Settings</span>
-              </IconButton>
-              {!hasSession ? (
+            <div className="hidden md:block text-[11px] text-slate-500 mr-2">
+              <span>Req: <span className="font-medium">{metrics.requests}</span></span>
+              <span className="mx-1">·</span>
+              <span>Tok: <span className="font-medium">{metrics.total}</span> <span className="opacity-70">(P {metrics.prompt} / C {metrics.completion})</span></span>
+            </div>
+            <IconButton title="Settings" onClick={() => setSettingsOpen(true)} disabled={busy}>
+              <span className="text-base">⚙️</span>
+              <span className="text-sm">Settings</span>
+            </IconButton>
+            {!hasSession ? (
               <IconButton title="Start Session" onClick={startSession} className="bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700" disabled={busy}>
                 <span className="text-base">▶</span>
                 <span className="text-sm">Start Session</span>
@@ -560,8 +594,8 @@ export default function App() {
                 <span className="text-base">⟳</span>
                 <span className="text-sm">Reset</span>
               </IconButton>
-              )}
-            </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -756,6 +790,33 @@ function splitIntoBlocks(text) {
   while ((m = re.exec(text)) !== null) {
     const before = text.slice(lastIndex, m.index);
     if (before.trim()) blocks.push({ type: "text", text: before.trim() });
+  function approxTokensFromText(t) {
+    if (!t) return 0;
+    const chars = t.length;
+    return Math.ceil(chars / 4); // rough heuristic
+  }
+
+  function approxPromptTokensFromMessages(msgs) {
+    try {
+      const joined = msgs.map(m => (m?.content || "")).join("\n");
+      return approxTokensFromText(joined);
+    } catch {
+      return 0;
+    }
+  }
+
+  function recordUsage({ usage, msgs, completionText }) {
+    const promptTokens = usage?.prompt_tokens ?? approxPromptTokensFromMessages(msgs || []);
+    const completionTokens = usage?.completion_tokens ?? approxTokensFromText(completionText || "");
+    const totalTokens = usage?.total_tokens ?? (promptTokens + completionTokens);
+    setMetrics((m) => ({
+      requests: (m.requests || 0) + 1,
+      prompt: (m.prompt || 0) + promptTokens,
+      completion: (m.completion || 0) + completionTokens,
+      total: (m.total || 0) + totalTokens,
+      last: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
+    }));
+  }
     blocks.push({ type: "code", text: m[1].trim() });
     lastIndex = m.index + m[0].length;
   }
