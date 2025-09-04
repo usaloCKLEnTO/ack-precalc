@@ -272,6 +272,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
   const [retryNote, setRetryNote] = useState("");
+  const [toast, setToast] = useState("");
+  const toastTimerRef = useRef(null);
   const lastActionRef = useRef(0);
 
   // State drawer
@@ -333,6 +335,12 @@ export default function App() {
   const hasSession = messages.length > 0;
 
   // ---- Token metrics helpers (inside App scope) ----
+  function showToast(msg) {
+    try { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); } catch {}
+    setToast(msg);
+    toastTimerRef.current = setTimeout(() => setToast("") , 2000);
+  }
+
   function approxTokensFromText(t) {
     if (!t) return 0;
     const chars = t.length;
@@ -379,6 +387,7 @@ export default function App() {
   function handleSaveSettings() {
     saveSettings({ apiKey, baseUrl, model });
     setSettingsOpen(false);
+    showToast("Settings saved");
   }
 
   function downloadConfig() {
@@ -390,6 +399,7 @@ export default function App() {
     a.download = "precalc-config.json";
     a.click();
     URL.revokeObjectURL(url);
+    showToast("Config exported");
   }
 
   // ------------------------------ Session Import/Export ------------------------------
@@ -409,6 +419,7 @@ export default function App() {
       a.download = `precalc-session-${ts}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      showToast("Session exported");
     } catch (e) {
       alert("Export failed: " + (e?.message || String(e)));
     }
@@ -426,6 +437,7 @@ export default function App() {
       if (y) setDrawerOpen(true);
       setMetrics({ requests: 0, prompt: 0, completion: 0, total: 0, last: { prompt: 0, completion: 0, total: 0 } });
       setSettingsOpen(false);
+      showToast("Session imported");
     } catch (e) {
       alert("Import failed: " + (e?.message || String(e)));
     } finally {
@@ -503,6 +515,7 @@ export default function App() {
       setModel(cfg.model || "");
       setApiKey(cfg.apiKey || "");
       saveSettings({ apiKey: cfg.apiKey || "", baseUrl: cfg.baseUrl || "", model: cfg.model || "" });
+      showToast("Config imported");
     } catch (e) {
       alert("Import failed: " + (e?.message || String(e)));
     } finally {
@@ -560,6 +573,7 @@ export default function App() {
       await navigator.clipboard?.writeText(link);
       setMagicCopied(true);
       setTimeout(() => setMagicCopied(false), 1500);
+      showToast("Magic Link copied");
     } catch (e) {
       // Fallback: show prompt
       window.prompt("Copy this Magic Link", link);
@@ -877,6 +891,15 @@ export default function App() {
           </div>
         </div>
       </Modal>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="rounded-full bg-slate-900 text-white text-sm px-4 py-2 shadow-lg border border-slate-800">
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
