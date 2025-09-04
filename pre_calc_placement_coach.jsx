@@ -207,12 +207,13 @@ async function callChatCompletions({ baseUrl, apiKey, model, messages }) {
 }
 
 // ------------------------------ Small UI primitives ------------------------------
-function IconButton({ children, onClick, title, className = "" }) {
+function IconButton({ children, onClick, title, className = "", disabled = false }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`inline-flex items-center gap-2 rounded-2xl px-3 py-2 shadow-sm border border-slate-300 hover:bg-slate-50 active:scale-[0.99] transition ${className}`}
+      disabled={disabled}
+      className={`inline-flex items-center gap-2 rounded-2xl px-3 py-2 shadow-sm border border-slate-300 ${disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-50 active:scale-[0.99]"} transition ${className}`}
     >
       {children}
     </button>
@@ -250,6 +251,7 @@ export default function App() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const lastActionRef = useRef(0);
 
   // State drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -300,6 +302,13 @@ export default function App() {
   const stageInfo = useMemo(() => parseStageProgress(lastYaml), [lastYaml]);
 
   const hasSession = messages.length > 0;
+
+  function canAct() {
+    const now = Date.now();
+    if (now - lastActionRef.current < 300) return false;
+    lastActionRef.current = now;
+    return true;
+  }
 
   async function ensureSettings() {
     if (!baseUrl) throw new Error("Base URL is required");
@@ -425,6 +434,8 @@ export default function App() {
   }
 
   async function startSession() {
+    if (busy) return;
+    if (!canAct()) return;
     try {
       setError("");
       await ensureSettings();
@@ -455,6 +466,16 @@ export default function App() {
 
   async function sendUser(text) {
     if (!text.trim()) return;
+    if (busy) return;
+    if (!canAct()) return;
+    // Local STATE toggle to avoid an API call when we already have YAML
+    if (/^STATE$/i.test(text.trim())) {
+      if (lastYaml && lastYaml.trim()) {
+        setDrawerOpen((v) => !v);
+        setInput("");
+        return;
+      }
+    }
     try {
       setError("");
       await ensureSettings();
@@ -525,22 +546,22 @@ export default function App() {
                 <span>Progress: <span className="font-medium">—</span></span>
               )}
             </div>
-            <IconButton title="Settings" onClick={() => setSettingsOpen(true)}>
-              <span className="text-base">⚙️</span>
-              <span className="text-sm">Settings</span>
-            </IconButton>
-            {!hasSession ? (
-              <IconButton title="Start Session" onClick={startSession} className="bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700">
+              <IconButton title="Settings" onClick={() => setSettingsOpen(true)} disabled={busy}>
+                <span className="text-base">⚙️</span>
+                <span className="text-sm">Settings</span>
+              </IconButton>
+              {!hasSession ? (
+              <IconButton title="Start Session" onClick={startSession} className="bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700" disabled={busy}>
                 <span className="text-base">▶</span>
                 <span className="text-sm">Start Session</span>
               </IconButton>
-            ) : (
+              ) : (
               <IconButton title="Reset Session" onClick={resetSession}>
                 <span className="text-base">⟳</span>
                 <span className="text-sm">Reset</span>
               </IconButton>
-            )}
-          </div>
+              )}
+            </div>
         </div>
       </header>
 
@@ -566,11 +587,11 @@ export default function App() {
               <div className="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{error}</div>
             )}
             <div className="flex items-center gap-2">
-              <IconButton title="Send NEXT" onClick={() => sendUser("NEXT")}>
+              <IconButton title="Send NEXT" onClick={() => sendUser("NEXT")} disabled={busy}>
                 <span>➡️</span>
                 <span className="text-sm">NEXT</span>
               </IconButton>
-              <IconButton title="Toggle STATE" onClick={() => sendUser("STATE") }>
+              <IconButton title="Toggle STATE" onClick={() => sendUser("STATE") } disabled={busy}>
                 <span>📄</span>
                 <span className="text-sm">STATE</span>
               </IconButton>
@@ -587,7 +608,7 @@ export default function App() {
                 }}
                 disabled={busy}
               />
-              <IconButton title="Send" onClick={() => sendUser(input)} className="bg-slate-900 text-white border-slate-900 hover:bg-slate-800" >
+              <IconButton title="Send" onClick={() => sendUser(input)} className="bg-slate-900 text-white border-slate-900 hover:bg-slate-800" disabled={busy}>
                 <span>✉️</span>
                 <span className="text-sm">Send</span>
               </IconButton>
