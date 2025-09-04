@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://usaloCKLEnTO.github.io/ack-precalc/sitemap.xml
+
